@@ -1,0 +1,684 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<title>即時媒合看板</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --bg:#0a0e1a;
+  --panel:#121a2b;
+  --panel-alt:#16213a;
+  --line:#232f47;
+  --text:#e8ecf5;
+  --text-dim:#8793ab;
+  --amber:#f2a93b;
+  --green:#3ecf8e;
+  --blue:#4f8dfd;
+  --purple:#a78bfa;
+  --gray:#4b5875;
+  --mono:'IBM Plex Mono', ui-monospace, monospace;
+  --sans:'Inter', system-ui, -apple-system, sans-serif;
+}
+*{box-sizing:border-box;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--sans);}
+body{min-height:100vh;}
+.app{max-width:1040px;margin:0 auto;padding:20px 16px 60px;}
+
+/* header */
+.header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;
+  background:linear-gradient(180deg,var(--panel-alt),var(--panel));
+  border:1px solid var(--line);border-radius:10px;margin-bottom:16px;position:relative;overflow:hidden;}
+.header::before{content:"";position:absolute;inset:0;
+  background:repeating-linear-gradient(180deg,rgba(255,255,255,0.02) 0px,rgba(255,255,255,0.02) 1px,transparent 1px,transparent 3px);
+  pointer-events:none;}
+.h-title{display:flex;align-items:baseline;gap:10px;}
+.h-title .dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:pulse 1.6s infinite;}
+@keyframes pulse{0%,100%{opacity:1;}50%{opacity:.35;}}
+.h-title h1{font-family:var(--mono);font-size:19px;letter-spacing:.5px;margin:0;font-weight:700;}
+.h-sub{color:var(--text-dim);font-size:12px;font-family:var(--mono);margin-top:4px;}
+.h-clock{font-family:var(--mono);font-size:22px;font-weight:600;letter-spacing:1px;color:var(--amber);
+  font-variant-numeric:tabular-nums;}
+
+/* nav */
+.tabs{display:flex;gap:6px;margin-bottom:16px;}
+.tab{flex:1;padding:11px 10px;text-align:center;background:var(--panel);border:1px solid var(--line);
+  border-radius:8px;cursor:pointer;font-size:13.5px;font-weight:600;color:var(--text-dim);
+  font-family:var(--sans);transition:all .15s;user-select:none;}
+.tab:hover{color:var(--text);border-color:#33456b;}
+.tab.active{color:var(--bg);background:var(--amber);border-color:var(--amber);}
+
+/* panels */
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;display:none;}
+.panel.active{display:block;}
+
+/* summary strip */
+.summary{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}
+.sum-card{background:var(--panel-alt);border:1px solid var(--line);border-radius:8px;padding:12px 14px;}
+.sum-num{font-family:var(--mono);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums;}
+.sum-label{font-size:11.5px;color:var(--text-dim);margin-top:2px;}
+.sum-card.c-interviewing .sum-num{color:var(--green);}
+.sum-card.c-waiting .sum-num{color:var(--amber);}
+.sum-card.c-free .sum-num{color:var(--text-dim);}
+.sum-card.c-hired .sum-num{color:var(--purple);}
+
+/* board table */
+.board-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+.board-head h2{font-size:14px;margin:0;font-family:var(--mono);color:var(--text-dim);letter-spacing:.5px;}
+.flap-list{display:grid;grid-template-columns:repeat(6,1fr);gap:8px;}
+.flap-row{display:flex;flex-direction:column;gap:7px;
+  background:var(--panel-alt);border:1px solid var(--line);border-radius:7px;padding:10px 11px;
+  font-family:var(--mono);font-size:12px;}
+.flap-row.flip{animation:flip .5s ease;}
+@keyframes flip{0%{transform:rotateX(90deg);opacity:0;}100%{transform:rotateX(0);opacity:1;}}
+.flap-row-top{display:flex;align-items:baseline;gap:6px;}
+.flap-num{color:var(--text-dim);font-weight:600;font-size:10.5px;}
+.flap-name{font-family:var(--sans);font-weight:700;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.flap-meta{display:flex;justify-content:space-between;align-items:center;color:var(--text-dim);font-size:10.5px;gap:6px;}
+.flap-meta .flap-company{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+@media (max-width:820px){ .flap-list{grid-template-columns:repeat(3,1fr);} }
+@media (max-width:480px){ .flap-list{grid-template-columns:repeat(2,1fr);} .summary{grid-template-columns:repeat(2,1fr);} }
+.status-pill{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:5px;font-size:11.5px;font-weight:700;letter-spacing:.4px;width:fit-content;}
+.status-pill .led{width:6px;height:6px;border-radius:50%;}
+.st-interviewing{background:rgba(62,207,142,.12);color:var(--green);}
+.st-interviewing .led{background:var(--green);box-shadow:0 0 6px var(--green);}
+.st-waiting{background:rgba(242,169,59,.12);color:var(--amber);}
+.st-waiting .led{background:var(--amber);}
+.st-free{background:rgba(139,151,171,.12);color:var(--text-dim);}
+.st-free .led{background:var(--gray);}
+.st-done{background:rgba(79,141,253,.12);color:var(--blue);}
+.st-done .led{background:var(--blue);}
+.st-hired{background:rgba(167,139,250,.14);color:var(--purple);}
+.st-hired .led{background:var(--purple);box-shadow:0 0 6px var(--purple);}
+.empty{color:var(--text-dim);font-size:13px;padding:24px;text-align:center;font-family:var(--mono);}
+.flap-list .empty{grid-column:1/-1;}
+
+/* company panel */
+.company-select{display:flex;align-items:center;gap:10px;margin-bottom:16px;}
+.company-select label{font-size:12.5px;color:var(--text-dim);}
+select,input[type=text],textarea{background:var(--panel-alt);border:1px solid var(--line);color:var(--text);
+  border-radius:6px;padding:9px 11px;font-family:var(--sans);font-size:13.5px;outline:none;}
+select:focus,input:focus,textarea:focus{border-color:var(--amber);}
+select{min-width:200px;}
+
+.roster{display:flex;flex-direction:column;gap:8px;}
+.roster-row{display:grid;grid-template-columns:1fr 140px 1fr auto;align-items:center;gap:10px;
+  background:var(--panel-alt);border:1px solid var(--line);border-radius:7px;padding:9px 12px;}
+.roster-name{font-weight:600;font-size:13.5px;}
+.roster-note{color:var(--text-dim);font-size:11.5px;font-family:var(--mono);}
+.btn{border:none;border-radius:6px;padding:7px 12px;font-size:12px;font-weight:700;cursor:pointer;
+  font-family:var(--sans);transition:opacity .15s;white-space:nowrap;}
+.btn:hover{opacity:.85;}
+.btn:disabled{opacity:.3;cursor:not-allowed;}
+.btn-start{background:var(--green);color:#06291a;}
+.btn-queue{background:var(--amber);color:#2b1a02;}
+.btn-end{background:var(--blue);color:#031530;}
+.btn-remove{background:var(--panel);color:var(--text-dim);border:1px solid var(--line);}
+.btn-add{background:var(--amber);color:#2b1a02;}
+.btn-danger{background:transparent;color:#e8577a;border:1px solid rgba(232,87,122,.3);}
+.btn-hire{background:var(--purple);color:#20123f;}
+.btn-unhire{background:transparent;color:var(--purple);border:1px solid rgba(167,139,250,.4);}
+
+/* admitted list */
+.admit-list{display:flex;flex-direction:column;gap:8px;}
+.admit-row{display:grid;grid-template-columns:1fr 1fr 140px auto;align-items:center;gap:10px;
+  background:var(--panel-alt);border:1px solid var(--line);border-left:3px solid var(--purple);
+  border-radius:7px;padding:10px 12px;}
+.admit-name{font-weight:700;font-size:13.5px;}
+.admit-company{color:var(--purple);font-weight:600;font-size:13px;}
+.admit-time{color:var(--text-dim);font-size:11.5px;font-family:var(--mono);}
+
+/* setup */
+.setup-block{margin-bottom:22px;}
+.setup-block h3{font-size:13px;font-family:var(--mono);color:var(--text-dim);margin:0 0 10px;letter-spacing:.4px;}
+.row-inline{display:flex;gap:8px;margin-bottom:10px;}
+.row-inline input,.row-inline select{flex:1;}
+textarea{width:100%;min-height:80px;resize:vertical;font-family:var(--mono);}
+.chip-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;}
+.chip{display:flex;align-items:center;gap:8px;background:var(--panel-alt);border:1px solid var(--line);
+  border-radius:20px;padding:6px 8px 6px 12px;font-size:12.5px;}
+.chip button{background:none;border:none;color:var(--text-dim);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;}
+.chip button:hover{color:#e8577a;}
+.hint{color:var(--text-dim);font-size:12px;line-height:1.6;margin-top:6px;}
+.conn{font-family:var(--mono);font-size:11px;color:var(--text-dim);display:flex;align-items:center;gap:6px;margin-top:2px;}
+.conn .led{width:6px;height:6px;border-radius:50%;background:var(--green);}
+
+/* password modal */
+.modal-overlay{position:fixed;inset:0;background:rgba(4,6,12,.72);display:none;align-items:center;justify-content:center;z-index:50;padding:20px;}
+.modal-overlay.show{display:flex;}
+.modal-box{background:var(--panel-alt);border:1px solid var(--line);border-radius:12px;padding:24px;width:100%;max-width:300px;
+  box-shadow:0 20px 60px rgba(0,0,0,.5);}
+.modal-title{font-family:var(--mono);font-size:15px;font-weight:700;margin-bottom:6px;}
+.modal-sub{color:var(--text-dim);font-size:12.5px;margin-bottom:14px;line-height:1.5;}
+.modal-box input{width:100%;letter-spacing:2px;font-family:var(--mono);}
+.modal-error{color:#e8577a;font-size:12px;margin-top:8px;display:none;}
+.modal-actions{display:flex;gap:8px;margin-top:16px;}
+.modal-actions .btn{flex:1;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="header">
+    <div>
+      <div class="h-title"><span class="dot"></span><h1 id="eventTitle">即時媒合看板</h1></div>
+      <div class="h-sub">校園徵才媒合會 · 面試狀態即時同步</div>
+      <div class="conn"><span class="led"></span><span id="connText">連線中 · Firestore 即時同步</span></div>
+    </div>
+    <div class="h-clock" id="clock">--:--:--</div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="overview">總覽看板</div>
+    <div class="tab" data-tab="company">公司操作台</div>
+    <div class="tab" data-tab="admitted">錄取名單</div>
+    <div class="tab" data-tab="setup">名單設定</div>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="panel active" id="panel-overview">
+    <div class="summary">
+      <div class="sum-card c-interviewing"><div class="sum-num" id="numInterviewing">0</div><div class="sum-label">面試中</div></div>
+      <div class="sum-card c-waiting"><div class="sum-num" id="numWaiting">0</div><div class="sum-label">等候中</div></div>
+      <div class="sum-card c-free"><div class="sum-num" id="numFree">0</div><div class="sum-label">目前空閒</div></div>
+      <div class="sum-card c-hired"><div class="sum-num" id="numHired">0</div><div class="sum-label">已錄取</div></div>
+    </div>
+    <div class="board-head"><h2>學生即時狀態</h2></div>
+    <div class="flap-list" id="overviewList"></div>
+  </div>
+
+  <!-- COMPANY -->
+  <div class="panel" id="panel-company">
+    <div class="company-select">
+      <label>我是公司：</label>
+      <select id="companySelect"></select>
+    </div>
+    <div class="board-head"><h2 id="companyHeading">全體學生名單</h2></div>
+    <div class="roster" id="companyRoster"></div>
+  </div>
+
+  <!-- ADMITTED -->
+  <div class="panel" id="panel-admitted">
+    <div class="board-head"><h2>新增錄取</h2></div>
+    <div class="row-inline">
+      <select id="admitStudentSelect"></select>
+      <select id="admitCompanySelect"></select>
+      <button class="btn btn-hire" id="addAdmitBtn">新增錄取</button>
+    </div>
+    <div class="hint" id="admitFormHint" style="margin-bottom:16px;"></div>
+    <div class="board-head"><h2>已確定錄取</h2></div>
+    <div class="admit-list" id="admitList"></div>
+  </div>
+
+  <!-- SETUP -->
+  <div class="panel" id="panel-setup">
+    <div class="setup-block">
+      <h3>公司名單</h3>
+      <div class="hint">每行一間公司名稱，可一次貼上多筆。</div>
+      <textarea id="companyBulk" placeholder="A 公司&#10;B 公司&#10;C 公司"></textarea>
+      <div class="row-inline" style="margin-top:8px;">
+        <button class="btn btn-add" id="addCompanyBtn">新增公司</button>
+      </div>
+      <div class="chip-list" id="companyChips"></div>
+    </div>
+    <div class="setup-block">
+      <h3>學生名單</h3>
+      <div class="hint">每行一位學生姓名或編號，可一次貼上多筆。</div>
+      <textarea id="studentBulk" placeholder="1號同學&#10;2號同學&#10;3號同學"></textarea>
+      <div class="row-inline" style="margin-top:8px;">
+        <button class="btn btn-add" id="addStudentBtn">新增學生</button>
+      </div>
+      <div class="chip-list" id="studentChips"></div>
+    </div>
+    <div class="hint">提示：所有公司人員看到的是同一份即時資料，任何人新增或更新都會同步給大家。</div>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="pwModal">
+  <div class="modal-box">
+    <div class="modal-title">🔒 需要密碼</div>
+    <div class="modal-sub" id="pwModalSub">請輸入密碼以進入</div>
+    <input type="password" id="pwInput" placeholder="輸入密碼" inputmode="numeric">
+    <div class="modal-error" id="pwError">密碼錯誤，請再試一次</div>
+    <div class="modal-actions">
+      <button class="btn btn-remove" id="pwCancel">取消</button>
+      <button class="btn btn-add" id="pwSubmit">確認進入</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+/* ====== 請填入你自己的 Firebase 專案設定 ======
+   1. 前往 https://console.firebase.google.com 建立一個免費專案
+   2. 左側選單開啟「Firestore Database」→ 建立資料庫（測試模式即可先開始）
+   3. 專案設定（齒輪圖示）→ 一般 → 新增網路應用程式 → 複製底下這組設定值貼上
+*/
+const firebaseConfig = {
+  apiKey: "AIzaSyAY1oay6Tze7OVfbdU0Q2jQc4UFvcuUL4M",
+  authDomain: "matching-board-ca8a5.firebaseapp.com",
+  projectId: "matching-board-ca8a5",
+  storageBucket: "matching-board-ca8a5.firebasestorage.app",
+  messagingSenderId: "887898313068",
+  appId: "1:887898313068:web:51f6c106e65ef8a8a1a349"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+const boardRef = doc(db, "matching-board", "main");
+
+let state = { companies: [], students: [] };
+let prevRenderSnapshot = '';
+let myCompanyId = null;
+
+function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+async function saveState(){
+  try{
+    await setDoc(boardRef, state);
+  }catch(e){ console.error('存檔失敗', e); alert('儲存失敗，請確認 Firebase 設定與 Firestore 規則是否正確。'); }
+}
+
+// 即時監聽：只要任何人更新資料，所有裝置會立刻收到推送更新（不需輪詢）
+function startRealtimeSync(){
+  onSnapshot(boardRef, (snap)=>{
+    if(snap.exists()){
+      const data = snap.data();
+      state = { companies: data.companies || [], students: data.students || [] };
+    } else {
+      state = { companies: [], students: [] };
+    }
+    renderAll();
+  }, (err)=>{
+    console.error('即時同步失敗', err);
+  });
+}
+
+function loadMyCompany(){
+  myCompanyId = localStorage.getItem('my-company') || null;
+}
+function saveMyCompany(id){
+  myCompanyId = id;
+  localStorage.setItem('my-company', id);
+}
+
+function statusMeta(s){
+  if(s.state === 'interviewing') return {label:'面試中', cls:'st-interviewing'};
+  if(s.state === 'waiting') return {label:'等候中', cls:'st-waiting'};
+  if(s.state === 'hired') return {label:'已錄取', cls:'st-hired'};
+  if(s.state === 'done') return {label:'已完成', cls:'st-done'};
+  return {label:'空閒', cls:'st-free'};
+}
+function companyName(id){
+  const c = state.companies.find(c=>c.id===id);
+  return c ? c.name : '—';
+}
+function timeAgo(ts){
+  if(!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleTimeString('zh-TW', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+
+function renderOverview(){
+  const list = document.getElementById('overviewList');
+  const sorted = state.students;
+
+  document.getElementById('numInterviewing').textContent = state.students.filter(s=>s.state==='interviewing').length;
+  document.getElementById('numWaiting').textContent = state.students.filter(s=>s.state==='waiting').length;
+  document.getElementById('numFree').textContent = state.students.filter(s=>!s.state || s.state==='free').length;
+  document.getElementById('numHired').textContent = state.students.filter(s=>s.state==='hired').length;
+
+  if(sorted.length===0){
+    list.innerHTML = '<div class="empty">尚未新增學生，請至「名單設定」新增。</div>';
+    return;
+  }
+
+  const snapshot = JSON.stringify(sorted.map(s=>[s.id,s.state,s.companyId]));
+  const changed = snapshot !== prevRenderSnapshot;
+  prevRenderSnapshot = snapshot;
+
+  list.innerHTML = sorted.map((s,i)=>{
+    const meta = statusMeta(s);
+    const comp = s.companyId ? companyName(s.companyId) : '—';
+    return `<div class="flap-row ${changed?'flip':''}">
+      <div class="flap-row-top">
+        <span class="flap-num">#${String(i+1).padStart(2,'0')}</span>
+        <span class="flap-name">${escapeHtml(s.name)}</span>
+      </div>
+      <span class="status-pill ${meta.cls}"><span class="led"></span>${meta.label}</span>
+      <div class="flap-meta">
+        <span class="flap-company">${escapeHtml(comp)}</span>
+        <span class="flap-time">${timeAgo(s.updatedAt)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderCompanySelect(){
+  const sel = document.getElementById('companySelect');
+  const prev = sel.value || myCompanyId;
+  sel.innerHTML = state.companies.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+  if(state.companies.length===0){
+    sel.innerHTML = '<option value="">尚未新增公司</option>';
+  } else if(prev && state.companies.some(c=>c.id===prev)){
+    sel.value = prev;
+    myCompanyId = prev;
+  } else {
+    myCompanyId = state.companies[0].id;
+    sel.value = myCompanyId;
+  }
+}
+
+function renderCompanyPanel(){
+  renderCompanySelect();
+  const heading = document.getElementById('companyHeading');
+  const roster = document.getElementById('companyRoster');
+  const me = state.companies.find(c=>c.id===myCompanyId);
+  heading.textContent = me ? `${me.name} · 學生名單` : '全體學生名單';
+
+  if(state.students.length===0){
+    roster.innerHTML = '<div class="empty">尚未新增學生，請至「名單設定」新增。</div>';
+    return;
+  }
+
+  const companyBusy = state.students.some(s=>s.state==='interviewing' && s.companyId===myCompanyId);
+
+  roster.innerHTML = state.students.map(s=>{
+    const meta = statusMeta(s);
+    const busyElsewhere = s.state === 'interviewing' && s.companyId !== myCompanyId;
+    const withMe = s.companyId === myCompanyId;
+    let note = '';
+    if(s.state === 'interviewing'){
+      note = withMe ? '正在與我方面試' : `面試中 · ${escapeHtml(companyName(s.companyId))}`;
+    } else if(s.state === 'waiting'){
+      note = withMe ? '正在等候我方面試' : `等候中 · ${escapeHtml(companyName(s.companyId))}`;
+    } else if(s.state === 'hired'){
+      note = withMe ? '已確定錄取（我方）' : `已被 ${escapeHtml(companyName(s.companyId))} 錄取`;
+    } else if(s.state === 'done'){
+      note = '已完成面試';
+    } else {
+      note = '目前空閒';
+    }
+
+    let actions = '';
+    if(s.state === 'interviewing' && withMe){
+      actions = `<button class="btn btn-end" data-action="end" data-id="${s.id}">結束面試</button>`;
+    } else if(s.state === 'waiting' && withMe){
+      actions = companyBusy
+        ? `<button class="btn btn-remove" disabled>本公司面試中</button>
+           <button class="btn btn-remove" data-action="remove" data-id="${s.id}">移出等候</button>`
+        : `<button class="btn btn-start" data-action="start" data-id="${s.id}">開始面試</button>
+           <button class="btn btn-remove" data-action="remove" data-id="${s.id}">移出等候</button>`;
+    } else if(s.state === 'hired' && withMe){
+      actions = `<button class="btn btn-remove" disabled>已於錄取名單確認</button>`;
+    } else if(s.state === 'hired'){
+      actions = `<button class="btn btn-remove" disabled>已被其他公司錄取</button>`;
+    } else if(!s.state || s.state === 'free' || s.state === 'done'){
+      actions = companyBusy
+        ? `<button class="btn btn-remove" disabled>本公司面試中</button>`
+        : `<button class="btn btn-start" data-action="start" data-id="${s.id}">開始面試</button>`;
+    } else if(busyElsewhere){
+      actions = `<button class="btn btn-remove" disabled>對方面試中</button>`;
+    } else {
+      actions = `<button class="btn btn-remove" data-action="remove" data-id="${s.id}">移出等候</button>`;
+    }
+
+    return `<div class="roster-row">
+      <div class="roster-name">${escapeHtml(s.name)}</div>
+      <div><span class="status-pill ${meta.cls}"><span class="led"></span>${meta.label}</span></div>
+      <div class="roster-note">${note}</div>
+      <div style="display:flex;gap:6px;">${actions}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderSetup(){
+  const chips = document.getElementById('companyChips');
+  chips.innerHTML = state.companies.map(c=>
+    `<div class="chip">${escapeHtml(c.name)}<button data-action="del-company" data-id="${c.id}">×</button></div>`
+  ).join('') || '<span class="hint">尚未新增公司</span>';
+
+  const schips = document.getElementById('studentChips');
+  schips.innerHTML = state.students.map(s=>
+    `<div class="chip">${escapeHtml(s.name)}<button data-action="del-student" data-id="${s.id}">×</button></div>`
+  ).join('') || '<span class="hint">尚未新增學生</span>';
+}
+
+function renderAdmitted(){
+  const studentSel = document.getElementById('admitStudentSelect');
+  const companySel = document.getElementById('admitCompanySelect');
+  const addBtn = document.getElementById('addAdmitBtn');
+  const hint = document.getElementById('admitFormHint');
+  const prevStudent = studentSel.value;
+  const prevCompany = companySel.value;
+
+  if(state.students.length===0 || state.companies.length===0){
+    studentSel.innerHTML = '<option value="">尚無學生</option>';
+    companySel.innerHTML = '<option value="">尚無公司</option>';
+    addBtn.disabled = true;
+    hint.textContent = '請先到「名單設定」新增學生與公司，才能在此登記錄取。';
+  } else {
+    addBtn.disabled = false;
+    hint.textContent = '直接選擇學生與錄取公司即可登記，若學生已在名單中會更新為最新錄取結果。';
+    studentSel.innerHTML = state.students.map(s=>{
+      const tag = s.state==='hired' ? `（目前已錄取 ${companyName(s.companyId)}）` : '';
+      return `<option value="${s.id}">${escapeHtml(s.name)}${tag}</option>`;
+    }).join('');
+    companySel.innerHTML = state.companies.map(c=>`<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+    if(prevStudent && state.students.some(s=>s.id===prevStudent)) studentSel.value = prevStudent;
+    if(prevCompany && state.companies.some(c=>c.id===prevCompany)) companySel.value = prevCompany;
+  }
+
+  const list = document.getElementById('admitList');
+  const hired = state.students.filter(s=>s.state==='hired').sort((a,b)=>(b.updatedAt||0)-(a.updatedAt||0));
+  if(hired.length===0){
+    list.innerHTML = '<div class="empty">目前尚無學生確定錄取。使用上方表單選擇學生與公司即可登記。</div>';
+    return;
+  }
+  list.innerHTML = hired.map(s=>{
+    return `<div class="admit-row">
+      <div class="admit-name">${escapeHtml(s.name)}</div>
+      <div class="admit-company">${escapeHtml(companyName(s.companyId))}</div>
+      <div class="admit-time">${timeAgo(s.updatedAt)}</div>
+      <div><button class="btn btn-unhire" data-action="unhire" data-id="${s.id}">取消錄取</button></div>
+    </div>`;
+  }).join('');
+}
+
+function renderAll(){
+  renderOverview();
+  renderCompanyPanel();
+  renderAdmitted();
+  renderSetup();
+}
+
+function escapeHtml(str){
+  const d = document.createElement('div');
+  d.textContent = str ?? '';
+  return d.innerHTML;
+}
+
+// ---- actions ----
+document.getElementById('addCompanyBtn').addEventListener('click', async ()=>{
+  const ta = document.getElementById('companyBulk');
+  const names = ta.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(names.length===0) return;
+  names.forEach(name=>{
+    state.companies.push({id: uid('co'), name});
+  });
+  ta.value = '';
+  await saveState();
+  renderAll();
+});
+
+document.getElementById('addStudentBtn').addEventListener('click', async ()=>{
+  const ta = document.getElementById('studentBulk');
+  const names = ta.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  if(names.length===0) return;
+  names.forEach(name=>{
+    state.students.push({id: uid('st'), name, state:'free', companyId:null, updatedAt: Date.now()});
+  });
+  ta.value = '';
+  await saveState();
+  renderAll();
+});
+
+document.getElementById('companySelect').addEventListener('change', async (e)=>{
+  await saveMyCompany(e.target.value);
+  renderCompanyPanel();
+});
+
+document.getElementById('companyRoster').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-action]');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  const student = state.students.find(s=>s.id===id);
+  if(!student) return;
+
+  if(action === 'queue'){
+    student.state = 'waiting';
+    student.companyId = myCompanyId;
+  } else if(action === 'start'){
+    const alreadyBusy = state.students.some(other=>other.id!==student.id && other.state==='interviewing' && other.companyId===myCompanyId);
+    if(alreadyBusy){
+      renderAll();
+      return;
+    }
+    student.state = 'interviewing';
+    student.companyId = myCompanyId;
+  } else if(action === 'end'){
+    student.state = 'free';
+    student.companyId = null;
+  } else if(action === 'hire'){
+    student.state = 'hired';
+    student.companyId = myCompanyId;
+  } else if(action === 'unhire'){
+    student.state = 'free';
+    student.companyId = null;
+  } else if(action === 'remove'){
+    student.state = 'free';
+    student.companyId = null;
+  }
+  student.updatedAt = Date.now();
+  await saveState();
+  renderAll();
+});
+
+document.getElementById('addAdmitBtn').addEventListener('click', async ()=>{
+  const studentId = document.getElementById('admitStudentSelect').value;
+  const companyId = document.getElementById('admitCompanySelect').value;
+  if(!studentId || !companyId) return;
+  const student = state.students.find(s=>s.id===studentId);
+  if(!student) return;
+  student.state = 'hired';
+  student.companyId = companyId;
+  student.updatedAt = Date.now();
+  await saveState();
+  renderAll();
+});
+
+document.getElementById('admitList').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-action="unhire"]');
+  if(!btn) return;
+  const student = state.students.find(s=>s.id===btn.dataset.id);
+  if(!student) return;
+  student.state = 'free';
+  student.companyId = null;
+  student.updatedAt = Date.now();
+  await saveState();
+  renderAll();
+});
+
+document.getElementById('companyChips').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-action="del-company"]');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  state.companies = state.companies.filter(c=>c.id!==id);
+  state.students.forEach(s=>{ if(s.companyId===id){ s.companyId=null; s.state='free'; } });
+  await saveState();
+  renderAll();
+});
+
+document.getElementById('studentChips').addEventListener('click', async (e)=>{
+  const btn = e.target.closest('button[data-action="del-student"]');
+  if(!btn) return;
+  const id = btn.dataset.id;
+  state.students = state.students.filter(s=>s.id!==id);
+  await saveState();
+  renderAll();
+});
+
+// password protection
+const PROTECTED_TABS = ['admitted', 'setup'];
+const TAB_LABELS = {admitted:'錄取名單', setup:'名單設定'};
+const PASSWORD = '0710';
+let unlocked = {};
+let pendingTab = null;
+
+function activateTab(target){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.toggle('active', t.dataset.tab===target));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.getElementById('panel-'+target).classList.add('active');
+}
+
+function openPwModal(target){
+  pendingTab = target;
+  document.getElementById('pwModalSub').textContent = `請輸入密碼以進入「${TAB_LABELS[target]}」`;
+  document.getElementById('pwError').style.display = 'none';
+  document.getElementById('pwInput').value = '';
+  document.getElementById('pwModal').classList.add('show');
+  setTimeout(()=>document.getElementById('pwInput').focus(), 50);
+}
+function closePwModal(){
+  document.getElementById('pwModal').classList.remove('show');
+  pendingTab = null;
+}
+function submitPw(){
+  const val = document.getElementById('pwInput').value;
+  if(val === PASSWORD){
+    unlocked[pendingTab] = true;
+    const target = pendingTab;
+    closePwModal();
+    activateTab(target);
+  } else {
+    document.getElementById('pwError').style.display = 'block';
+    document.getElementById('pwInput').value = '';
+    document.getElementById('pwInput').focus();
+  }
+}
+document.getElementById('pwCancel').addEventListener('click', closePwModal);
+document.getElementById('pwSubmit').addEventListener('click', submitPw);
+document.getElementById('pwInput').addEventListener('keydown', (e)=>{ if(e.key==='Enter') submitPw(); });
+document.getElementById('pwModal').addEventListener('click', (e)=>{ if(e.target.id==='pwModal') closePwModal(); });
+
+// tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    const target = tab.dataset.tab;
+    if(PROTECTED_TABS.includes(target) && !unlocked[target]){
+      openPwModal(target);
+      return;
+    }
+    activateTab(target);
+  });
+});
+
+// clock
+function tickClock(){
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString('zh-TW', {hour12:false});
+}
+setInterval(tickClock, 1000);
+tickClock();
+
+// init — Firestore onSnapshot 會持續推送即時更新，不需要輪詢
+loadMyCompany();
+startRealtimeSync();
+renderAll();
+</script>
+</body>
+</html>
