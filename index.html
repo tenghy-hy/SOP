@@ -362,7 +362,6 @@ function saveMyCompany(id){
 
 function statusMeta(s){
   if(s.state === 'interviewing') return {label:'面試中', cls:'st-interviewing'};
-  if(s.state === 'waiting') return {label:'等候中', cls:'st-waiting'};
   if(s.state === 'hired') return {label:'已錄取', cls:'st-hired'};
   if(s.state === 'done') return {label:'已完成', cls:'st-done'};
   return {label:'空閒', cls:'st-free'};
@@ -414,8 +413,7 @@ function renderInterviewStudentSelect(companyBusy){
   const prev = sel.value;
 
   const eligible = state.students.filter(s=>
-    !s.state || s.state==='free' || s.state==='done' ||
-    (s.state==='waiting' && s.companyId===myCompanyId)
+    !s.state || s.state==='free' || s.state==='done' || s.state==='waiting'
   );
 
   if(eligible.length===0){
@@ -423,8 +421,7 @@ function renderInterviewStudentSelect(companyBusy){
     btn.disabled = true;
   } else {
     sel.innerHTML = eligible.map(s=>{
-      const tag = (s.state==='waiting') ? '（等候中）' : '';
-      return `<option value="${s.id}">${escapeHtml(s.name)}${tag}</option>`;
+      return `<option value="${s.id}">${escapeHtml(s.name)}</option>`;
     }).join('');
     if(prev && eligible.some(s=>s.id===prev)) sel.value = prev;
     btn.disabled = companyBusy;
@@ -490,8 +487,6 @@ function renderCompanyPanel(){
     let note = '';
     if(s.state === 'interviewing'){
       note = withMe ? '正在與我方面試' : `面試中 · ${escapeHtml(companyName(s.companyId))}`;
-    } else if(s.state === 'waiting'){
-      note = withMe ? '正在等候我方面試' : `等候中 · ${escapeHtml(companyName(s.companyId))}`;
     } else if(s.state === 'hired'){
       note = withMe ? '已確定錄取（我方）' : `已被 ${escapeHtml(companyName(s.companyId))} 錄取`;
     } else if(s.state === 'done'){
@@ -503,24 +498,18 @@ function renderCompanyPanel(){
     let actions = '';
     if(s.state === 'interviewing' && withMe){
       actions = `<button class="btn btn-end" data-action="end" data-id="${s.id}">結束面試</button>`;
-    } else if(s.state === 'waiting' && withMe){
-      actions = companyBusy
-        ? `<button class="btn btn-remove" disabled>本公司面試中</button>
-           <button class="btn btn-remove" data-action="remove" data-id="${s.id}">移出等候</button>`
-        : `<button class="btn btn-start" data-action="start" data-id="${s.id}">開始面試</button>
-           <button class="btn btn-remove" data-action="remove" data-id="${s.id}">移出等候</button>`;
     } else if(s.state === 'hired' && withMe){
       actions = `<button class="btn btn-remove" disabled>已於錄取名單確認</button>`;
     } else if(s.state === 'hired'){
       actions = `<button class="btn btn-remove" disabled>已被其他公司錄取</button>`;
-    } else if(!s.state || s.state === 'free' || s.state === 'done'){
+    } else if(!s.state || s.state === 'free' || s.state === 'done' || s.state === 'waiting'){
       actions = companyBusy
         ? `<button class="btn btn-remove" disabled>本公司面試中</button>`
         : `<button class="btn btn-start" data-action="start" data-id="${s.id}">開始面試</button>`;
     } else if(busyElsewhere){
       actions = `<button class="btn btn-remove" disabled>對方面試中</button>`;
     } else {
-      actions = `<button class="btn btn-remove" data-action="remove" data-id="${s.id}">移出等候</button>`;
+      actions = `<button class="btn btn-remove" data-action="remove" data-id="${s.id}">重設為空閒</button>`;
     }
 
     return `<div class="roster-row">
@@ -821,4 +810,3 @@ renderAll();
 </script>
 </body>
 </html>
-
