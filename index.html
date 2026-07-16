@@ -478,8 +478,6 @@ function renderCompanyPanel(){
     return;
   }
 
-  const companyBusy = state.students.some(s=>s.state==='interviewing' && s.companyId===myCompanyId);
-
   roster.innerHTML = state.students.map(s=>{
     const meta = statusMeta(s);
     const busyElsewhere = s.state === 'interviewing' && s.companyId !== myCompanyId;
